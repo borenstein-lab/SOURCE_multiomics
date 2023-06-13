@@ -1,0 +1,491 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+# Set local path for data import
+
+```{r}
+
+metadata_path
+mtx_path
+pathway_path
+ffq_path
+ran_seq_path
+stool_mtb_path
+ec_path
+
+```
+
+
+# Import functions
+```{r}
+source("helper_functions.R")
+
+library(mixOmics)
+library(tidymodels)
+library(stringr)
+library(ggplot2)
+library(magrittr)
+library(ggdist)
+library(vegan)
+library(rstatix)
+library(tidyverse)
+library(plotly)
+```
+
+
+# Load and tidy data
+
+Here we load and tidy data for further analysis
+```{r fig.width=20}
+
+#-------------------#
+### Load metadata ###
+#-------------------#
+
+metadata <- read_delim(metadata_path)%>%
+  rename_with(~str_to_lower(.x))%>%
+  rename(sample_id = sampleid, group = dx, short_id = pn_id )
+
+#------------------------#
+### stool metagenomics ###
+#------------------------#
+
+mtx_specie <- read_delim(mtx_path)%>%
+  rename(taxa = Taxa)%>%
+  pivot_longer(-taxa, names_to = "short_id")%>%
+  #normelize to 100% rel abndence
+  group_by(short_id)%>%
+  mutate(sample_sum = sum(value),
+         value = value/sample_sum)%>%
+  ungroup()%>%
+  # filter only high quality sample (and remove sample A060 that is missing metadata)
+  filter(short_id %in% metadata$short_id)%>%
+  # replace_short ids with sample id
+  left_join(metadata)%>%
+  dplyr::select(taxa, sample_id, value)%>%
+  mutate(taxa = str_extract(taxa , "s__\\w*"),
+         taxa = str_remove(taxa, "s__"))
+
+
+#------------------------#
+### stool functions    ###
+#------------------------#
+
+mtx_pathway <-  read_delim(pathway_path)%>%
+  pivot_longer(-pathway, names_to = "short_id", values_to = "value")%>%
+  separate(pathway, sep = ": ", c("pathway_id", "pathway_description"))
+
+#map pathway id to description
+pathway_id_to_description <- mtx_pathway%>%
+  select(pathway_id, pathway_description)%>%
+  unique()
+
+mtx_pathway <- mtx_pathway%>%
+  select(-pathway_description)%>%
+  #normelize to 100% rel abndence
+  group_by(short_id)%>%
+  mutate(sample_sum = sum(value),
+         value = value/sample_sum)%>%
+  ungroup()%>%
+  # replace_short ids with sample id
+  left_join(metadata)%>%
+  dplyr::select(pathway_id, sample_id, value)%>%
+  # filter only high quality sample (and remove sample A060 that is missing metadata)
+  filter(sample_id %in% metadata$sample_id)
+  
+
+#------------------------#
+### stool EC           ###
+#------------------------#
+
+mtx_ec <- read_delim(ec_path)%>%
+  pivot_longer(-EC, names_to = "short_id", values_to = "value")%>%
+  #normelize to 100% rel abndence
+  group_by(short_id)%>%
+  mutate(sample_sum = sum(value),
+         value = value/sample_sum)%>%
+  ungroup()%>%
+  # replace_short ids with sample id
+  left_join(metadata)%>%
+  dplyr::select(EC, sample_id, value)%>%
+  # filter only high quality sample (and remove sample A060 that is missing metadata)
+  filter(sample_id %in% metadata$sample_id)
+
+
+#------------------------------#
+### stool metabolomics (mtb) ###
+#------------------------------#
+
+
+mtb <- read_delim(stool_mtb_path)%>%
+  rename("sample_id" = "ID")%>%
+  pivot_longer(-sample_id, names_to = "mtb_name")%>%
+  mutate(mtb_name = str_c("mtb_", str_to_lower(str_replace(mtb_name, " ", "_"))),
+         mtb_name = str_replace_all(mtb_name,  pattern=",", replacement = "_"),
+         mtb_name = str_replace_all(mtb_name, pattern = "\\(|\\)|\\'", replacement = "_"))%>%
+  filter(sample_id %in% metadata$sample_id)%>%
+  #drop samples without mtb
+  drop_na()
+
+
+#-------------#
+### RNA seq ###
+#-------------#
+
+rna_seq <- read_delim(rna_seq_path)%>%
+  rename_with(~str_to_lower(.x))%>%
+  rename(sample_id = id)%>%
+  pivot_longer(-sample_id, names_to = "rna")%>%
+  #normelize to range 0-1
+  group_by(rna)%>%
+  mutate(value = (value - min(value)) / (max(value) - min(value)))%>%
+  ungroup()
+
+#---------#
+### ffq ###
+#---------#
+
+ffq <- read_delim(ffq_path)%>%
+  rename_with(~str_to_lower(.x))%>%
+  rename(sample_id = id)%>%
+  #remove samples with no FFQ (all NA)
+  filter(!sample_id %in% c("SOURCE20_21.TI2.A014", "SOURCE20_25.TI1.A016", "SOURCE20_31.TI2.A019", "SOURCE20_32.TI.A020", "SOURCE20_7.TI1.A276.A008", "SOURCE21_10.TI2.A031", "SOURCE21_62.A058.TI2"))%>%
+  pivot_longer(-sample_id, names_to = "question")%>%
+  filter(!str_detect(question, pattern = "x15"))%>%
+  drop_na()
+
+```
+## Filter samples that have all 3 omics
+continue analysis only with samples that have 3 omics (mtx+rna+mtb)
+
+```{r}
+# Filter samples that have all omics 
+metadata_quality_sampels <- metadata%>%
+  # mark which data is avialbe for each sample
+  mutate(has_mtx = if_else(sample_id %in% mtx_specie$sample_id, true = "yes", false = "no"),
+         has_mtb = if_else(sample_id %in% mtb$sample_id, true = "yes", false = "no"),
+         has_rna = if_else(sample_id %in% rna_seq$sample_id, true = "yes", false = "no"),
+         has_ffq = if_else(sample_id %in% ffq$sample_id, true = "yes", false = "no"))%>%
+  filter(has_mtx =="yes",has_mtb=="yes", has_rna == "yes" )
+
+#filter according to omics (n=36)
+mtx_specie_quality_sample <- mtx_specie%>%
+  filter(sample_id %in% metadata_quality_sampels$sample_id)
+
+mtb_quality_samples <- mtb%>%
+ filter(sample_id %in% metadata_quality_sampels$sample_id)
+
+rna_seq_quality_samples <- rna_seq%>%
+ filter(sample_id %in% metadata_quality_sampels$sample_id)
+
+# filter according to ffq (n=32)
+metadata_omics_and_ffq <- metadata%>%
+  # mark which data is avialbe for each sample
+  mutate(has_mtx = if_else(sample_id %in% mtx_specie$sample_id, true = "yes", false = "no"),
+         has_mtb = if_else(sample_id %in% mtb$sample_id, true = "yes", false = "no"),
+         has_rna = if_else(sample_id %in% rna_seq$sample_id, true = "yes", false = "no"),
+         has_ffq = if_else(sample_id %in% ffq$sample_id, true = "yes", false = "no"))%>%
+  filter(has_mtx =="yes",has_mtb=="yes", has_rna == "yes", has_ffq == "yes" )
+
+ffq_filtered <- ffq%>%
+  filter(sample_id %in% metadata_omics_and_ffq$sample_id)
+
+mtx_specie_ffq_samples <- mtx_specie%>%
+  filter(sample_id %in% metadata_omics_and_ffq$sample_id)
+
+mtb_ffq_samples <- mtb%>%
+ filter(sample_id %in% metadata_omics_and_ffq$sample_id)
+
+rna_seq_ffq_samples <- rna_seq%>%
+ filter(sample_id %in% metadata_omics_and_ffq$sample_id)
+
+mtx_pathway_samples <- mtx_pathway%>%
+  filter(sample_id %in% metadata_omics_and_ffq$sample_id)
+
+mtx_ec_samples <- mtx_ec%>%
+  filter(sample_id %in% metadata_omics_and_ffq$sample_id)
+
+```
+
+
+## Orgenize data to required format by mixomics
+a matrix with sample_ids as rownames and features as column names
+ 
+```{r}
+
+study_group <- metadata_quality_sampels%>%
+  filter(sample_id %in% mtx_specie_quality_sample$sample_id)%>%
+  filter(sample_id %in% mtb_quality_samples$sample_id)%>%
+  filter(sample_id %in% rna_seq_quality_samples$sample_id)%>%
+  arrange(sample_id)%>%
+  pull(group)%>%
+  as_factor()
+
+# Organize omic datasets - samples with 3 omics
+
+mtx_diablo_format <- mtx_specie_quality_sample%>%
+  pivot_wider(names_from = taxa, values_from = value)%>%
+  arrange(sample_id)%>%
+  column_to_rownames("sample_id")
+
+mtb_diablo_format <- mtb_quality_samples%>%
+  pivot_wider(names_from = mtb_name, values_from = value)%>%
+    arrange(sample_id)%>%
+  column_to_rownames("sample_id")
+
+rna_diablo_format <- rna_seq_quality_samples%>%
+  pivot_wider(names_from = rna, values_from = value)%>%
+    arrange(sample_id)%>%
+  column_to_rownames("sample_id")
+
+
+omics_for_diablo <- list(mtx= mtx_diablo_format, mtb = mtb_diablo_format, rna = rna_diablo_format)
+
+# Organize omic datasets - samples with 3 omics + ffq
+
+mtx_ffq_diablo_format <- mtx_specie_ffq_samples%>%
+  pivot_wider(names_from = taxa, values_from = value)%>%
+  arrange(sample_id)%>%
+  column_to_rownames("sample_id")
+  # get_pca()
+  # remove_rare_features(., prevalence_cutoff = 0.1,avg_abundance_cutoff = 0.005)%>%
+  # normalize_rows()
+
+mtb_ffq_diablo_format <- mtb_ffq_samples%>%
+  pivot_wider(names_from = mtb_name, values_from = value)%>%
+  arrange(sample_id)%>%
+  column_to_rownames("sample_id")
+    # get_pca()
+
+rna_ffq_diablo_format <- rna_seq_ffq_samples%>%
+  pivot_wider(names_from = rna, values_from = value)%>%
+  arrange(sample_id)%>%
+  column_to_rownames("sample_id")
+
+ffq_diablo_format <- ffq_filtered%>%
+  pivot_wider(names_from = question, values_from = value)%>%
+  arrange(sample_id)%>%
+  column_to_rownames("sample_id")
+
+mtx_pathway_ffq_diablo_format <- mtx_pathway_samples%>%
+  pivot_wider(names_from = pathway_id, values_from = value)%>%
+  arrange(sample_id)%>%
+  column_to_rownames("sample_id")
+  # remove_rare_features(., prevalence_cutoff = 0.1,avg_abundance_cutoff = 0.01)%>%
+  # normalize_rows()
+
+mtx_ec_ffq_diablo_format<- mtx_ec_samples%>%
+  pivot_wider(names_from = EC, values_from = value)%>%
+  arrange(sample_id)%>%
+  column_to_rownames("sample_id")
+  # remove_rare_features(., prevalence_cutoff = 0.1,avg_abundance_cutoff = 0.005)%>%
+  # normalize_rows()
+  
+
+omics_for_diablo <- list(mtx= mtx_ffq_diablo_format, 
+                         mtb = mtb_ffq_diablo_format, 
+                         rna = rna_ffq_diablo_format, 
+                         ffq = ffq_diablo_format,
+                         # pathway = mtx_pathway_ffq_diablo_format,
+                         ec = mtx_ec_ffq_diablo_format  )
+
+study_group <- metadata_quality_sampels%>%
+  filter(sample_id %in% mtx_specie_quality_sample$sample_id)%>%
+  filter(sample_id %in% mtb_quality_samples$sample_id)%>%
+  filter(sample_id %in% rna_seq_quality_samples$sample_id)%>%
+  filter(sample_id %in% ffq_filtered$sample_id)%>%
+  arrange(sample_id)%>%
+  pull(group)%>%
+  as_factor()
+
+omics_for_diablo_2 <- list(mtx= mtx_ffq_diablo_format, 
+                         mtb = mtb_ffq_diablo_format, 
+                         rna = rna_ffq_diablo_format, 
+                         ffq = ffq_diablo_format)
+
+
+ 
+```
+
+
+# PLS between omics and ffq
+```{r}
+omic_list <- c("mtx_ffq_diablo_format", "mtb_ffq_diablo_format", "rna_ffq_diablo_format", "ffq_diablo_format", "mtx_pathway_ffq_diablo_format", "mtx_ec_ffq_diablo_format")
+omic_id <- tibble(omic = omic_list, id= as.numeric(row_number(omic)))
+
+comperision_table <- expand_grid(omic_1 = omic_list, omic_2 = omic_list)%>%
+  left_join(omic_id, by = c("omic_1" = "omic"))%>%
+  rename(id_1 = id)%>%
+  left_join(omic_id, by = c("omic_2" = "omic"))%>%
+  rename(id_2 = id)%>%
+  filter(id_1<id_2)
+
+
+multi_pls <- map2(.x = comperision_table$omic_1,
+                  .y = comperision_table$omic_2,
+                  .f = ~{
+                        n_itr = 100
+                        omic_1 <- get(.x)
+                        omic_2 <- get(.y)
+                        pls_result <- calc_pls(data_1 = omic_1, data_2 = omic_2)
+                        #compere with shuffeled results
+                         random_results <- c()
+                         
+                         for(i in 1:n_itr){
+                          omic_2_shuffled <- omic_2[sample(1:nrow(omic_2)),]
+                          pls_result_random <- calc_pls(data_1 = omic_1, data_2 = omic_2_shuffled)
+                          random_rho <- pls_result_random$rho
+                          random_results[i] <- random_rho
+                           
+                         }
+
+                         threshold <- quantile(random_results, 0.95)
+                         rho = pls_result$rho[[1]]
+                         # tmp <- unique(c(random_results,rho ))
+                         # p <- (length(tmp)- rank(tmp)[which(tmp == rho)][[1]])/length(tmp)
+                         number_random <- random_results[random_results>rho]
+                         p = length(number_random)/n_itr
+                         
+                        result_table <- tibble(omic_1 = .x,
+                                omic_2 = .y,
+                                rho = pls_result$rho,
+                                threshold = threshold[[1]],
+                                p = p,
+                                is_stat_signif = if_else(rho > threshold, true = "yes", false  = "no"))
+                         return(result_table)
+                         
+                         })%>%
+  bind_rows()
+
+multi_pls_for_plot <-multi_pls%>%
+  left_join(omic_id, by = c("omic_1" = "omic"))%>%
+  mutate(omic_1 = case_when(omic_1 == "mtx_ffq_diablo_format" ~ "MGX Taxa",
+                            omic_1 == "mtb_ffq_diablo_format" ~ 'Metabolomics',
+                            omic_1 == "rna_ffq_diablo_format" ~ "Transcriptomics",
+                            omic_1 == "ffq_diablo_format" ~ "FFQ",
+                            omic_1 == "mtx_pathway_ffq_diablo_format" ~ "MGX Pathways",
+                            omic_1 == "mtx_ec_ffq_diablo_format" ~ "MGX ECs"),
+         omic_2 = case_when(omic_2 == "mtx_ffq_diablo_format" ~ "MGX Taxa",
+                            omic_2 == "mtb_ffq_diablo_format" ~ 'Metabolomics',
+                            omic_2 == "rna_ffq_diablo_format" ~ "Transcriptomics",
+                            omic_2 == "ffq_diablo_format" ~ "FFQ",
+                            omic_2 == "mtx_pathway_ffq_diablo_format" ~ "MGX Pathways",
+                            omic_2 == "mtx_ec_ffq_diablo_format" ~ "MGX ECs"))%>%
+  mutate(symbol = if_else(p<=0.1, true = "*", false = ""))%>%
+  mutate(omic_1 = if_else(omic_1 == "MGX Taxa" & omic_2 == "MGX Pathways" , true = "MGX Pathways", false = omic_1),
+         omic_2 = if_else(omic_1 == "MGX Pathways" & omic_2 == "MGX Pathways" , true =  "MGX Taxa", false = omic_2))
+# mutate(p_value = if_else(as.numeric(p_value) ==0, 2.2*10^-16, p_value ),
+  #       p_value_fdr= p.adjust(p_value, "fdr"))
+
+ggplot(multi_pls_for_plot, aes(x = omic_1, y = omic_2, fill = rho))+
+  geom_tile(color = "white", size = 2)+
+  geom_text(aes(label = symbol), color = "black", size = 4)+
+  theme_bw(base_size = 20)+
+  theme(axis.text.x = element_text(angle = 30, hjust =1))+
+  scale_fill_distiller(palette = "PuBuGn", direction = 1, na.value = "#08306b", "Rho" )+
+  labs(x = "", y = "")
+  
+ggplot(multi_pls_for_plot, aes(x = omic_1, y = omic_2, fill = p))+
+  geom_tile(color = "white", size = 2)+
+  geom_text(aes(label = symbol), color = "black", size = 4)+
+  geom_text(aes(label = symbol))+
+  theme_bw(base_size = 20)+
+  theme(axis.text.x = element_text(angle = 30, hjust =1))+
+  scale_fill_distiller(palette = "OrRd", direction = -1, na.value = "#08306b", "P-value" )+
+  labs(x = "", y = "")
+
+```
+
+# DIABLO
+## Run DIABLO
+
+```{r fig.width=6, fig.height=5}
+
+design <- matrix(0, ncol = length(omics_for_diablo_2), nrow = length(omics_for_diablo_2), 
+                dimnames = list(names(omics_for_diablo_2), names(omics_for_diablo_2)))
+
+diag(design) <- 0
+diablo_results <- block.splsda(X = omics_for_diablo_2, Y = study_group, design = design, ncomp = 2)
+
+```
+
+## Multi omic PC
+
+```{r fig.width=7, fig.height=4}
+multi_omic_plot <- plotArrow(diablo_results)%>%
+  pluck("data")%>%
+  as_tibble(rownames= "sample_id")%>%
+  pivot_longer(-c(sample_id,group), names_to = "feature", values_to = "value")%>%
+  separate(feature, sep = "_", c("axis", "omic"))%>%
+  pivot_wider(names_from = "axis", values_from = "value")%>%
+  mutate(group = if_else(group == "healthy", true = "Healthy", false = "Crohns"))%>%
+  mutate(omic = case_when(omic == "mtx" ~ "MGX Taxa",
+                            omic == "mtb" ~ 'Metabolomics',
+                            omic == "rna" ~ "Transcriptomics",
+                            omic == "ffq" ~ "FFQ",
+                            omic == "pathway" ~ "MGX Pathways",
+                            omic == "ec" ~ "MGX ECs",
+                          omic == "centroid" ~ "Centroid"))%>%
+  filter(omic != "Centroid")%>%
+  group_by(sample_id)%>%
+  mutate(mean_x = mean(x),
+         mean_y = mean(y))%>%
+  ungroup()
+
+ggplot(multi_omic_plot, aes(  group = sample_id))+
+  geom_segment(aes(x=mean_x, y=mean_y, xend=x, yend=y, color = group), alpha = 0.3, size = 1)+
+  geom_point(aes(x= x, y= y,shape = omic, fill = group), size = 3, alpha = 0.9, color = "grey30")+
+  geom_point(aes(x= mean_x, y= mean_y, color = group), shape = 19, size = 4)+
+  # geom_(aes(color = group), alpha = 0.5)+
+  theme_bw(base_size = 20)+
+  labs(x = "Component 1", y = "Component 2")+
+  scale_fill_manual(values = c("#ee6c4d", "#98c1d9"), "Disease")+
+  scale_color_manual(values = c("#A82E10", "#377395"), "Disease")+
+  scale_shape_manual(values = c(21, 22, 23, 24, 25),"Omic")
+
+```
+
+## Plot DIABLO corr
+
+```{r fig.width=7, fig.height=4}
+
+cor_circle_data <- plotVar(diablo_results,
+        cutoff = 0, rad.in = 0.5,
+        style = 'ggplot2', legend = TRUE)%>%
+  as_tibble()%>%
+  rename(omic = Block)%>%
+  mutate(omic = case_when(omic == "mtx" ~ "MGX Taxa",
+                            omic == "mtb" ~ 'Metabolomics',
+                            omic == "rna" ~ "Transcriptomics",
+                            omic == "ffq" ~ "FFQ",
+                            omic == "pathway" ~ "MGX Pathways",
+                            omic == "ec" ~ "MGX ECs"))
+
+pc_1_loadings <- cor_circle_data%>%
+  group_by(omic)%>%
+  slice_max(abs(x), n = 10)%>%
+  ungroup()
+
+pc_2_loadings <- cor_circle_data%>%
+  group_by(omic)%>%
+  slice_max(abs(y), n = 10)%>%
+  ungroup()
+
+cor_circle_data <- bind_rows(pc_1_loadings, pc_2_loadings)%>%
+  unique()
+
+p <- ggplot(cor_circle_data, aes( x=x , y=y))+
+  geom_point(aes(fill = omic, label = names), size = 4.5, shape = 23, color = "grey30", alpha = 0.65)+
+  geom_segment(aes(x=0, y=0, xend = x, yend = y), arrow = arrow(length=unit(.5, 'cm')), alpha = 0.4, color = "grey50")+
+  theme_bw(base_size = 20)+
+  # scale_fill_manual("Omic", values = c(  "#AE2012","#94D2BD", "#EE9B00","#CA6702", "#005F73"))+
+  scale_fill_manual("Omic", values = c(  "#AE2012","#94D2BD","#CA6702", "#005F73"))+
+  labs(x = "Component 1", y = "Component 2")
+p
+
+
+
+
+```
