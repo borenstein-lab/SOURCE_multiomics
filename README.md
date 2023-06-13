@@ -1,7 +1,5 @@
 # Diet-omics in the Study of Urban and Rural Crohn Disease Evolution (SOURCE)
 
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/Tzipisb/SOURCE/blob/main/LICENSE)
-
 This repository contains the code associated with the paper titled "Diet-omics in the Study of Urban and Rural Crohn Disease Evolution (SOURCE)".
 
 ## Abstract
