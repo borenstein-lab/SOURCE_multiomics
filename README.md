@@ -13,3 +13,13 @@ Crohn's Disease (CD) has witnessed an increased prevalence due to globalization 
 This repository contains the code for conducting the multi-omic analysis performed in the study. It includes the scripts and resources necessary to reproduce the results and further analyze the data.
 
 The repository structure is as follows:
+
+## Usage
+
+To use the code in this repository, follow these steps:
+
+1. Clone the repository:
+
+```bash
+git clone https://github.com/Tzipisb/SOURCE.git
+```
