@@ -1,32 +1,43 @@
-# SOURCE
- 
-This is the code associated with the paper :
+# Diet-omics in the Study of Urban and Rural Crohn Disease Evolution (SOURCE)
 
-Diet-omics in the Study of Urban and Rural Crohn Disease Evolution (SOURCE)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/Tzipisb/SOURCE/blob/main/LICENSE)
 
-Crohn disease (CD) burden has increased with globalization/urbanization, and with the rapid pace of the increase is attributed to environmental changes rather than genetic drift. The Study Of Urban and Rural CD Evolution (SOURCE, n=380) considered diet-omics domains simultaneously to detect complex interactions and identify potential beneficial and pathogenic factors linked with rural-urban transition and CD. We characterized exposures, diet, ileal transcriptomics, metabolomics, and microbiome in newly diagnosed Crohn Disease (CD) patients and controls in rural and urban China and Israel. Time spent by rural residents in urban environments was linked with changes in gut microbial composition and metabolomics, which mirrored those seen in CD. Ileal transcriptomics highlighted host metabolic and immune gene expression modules, that were linked to potential protective dietary exposures (coffee, manganese, vitamin D), fecal metabolites, and the microbiome. Bacteria-associated metabolites were primarily linked with host immune modules, whereas diet-linked metabolites were associated with host epithelial metabolic functions.
+This repository contains the code associated with the paper titled "Diet-omics in the Study of Urban and Rural Crohn Disease Evolution (SOURCE)". The study aimed to investigate the impact of environmental changes and urbanization on the evolution of Crohn's Disease (CD) by analyzing various diet-omics domains.
 
-The following repository contains code for multi-omic analysis. Further analysis is available - https://github.com/Tzipisb/SOURCE
+## Abstract
 
+<<<<<<< HEAD
+Crohn's Disease (CD) has witnessed an increased prevalence due to globalization and urbanization, suggesting that environmental factors play a significant role in its development. The Study Of Urban and Rural CD Evolution (SOURCE) involved 380 participants and aimed to identify potential factors associated with the transition from rural to urban areas and CD. The study analyzed exposures, diet, ileal transcriptomics, metabolomics, and the microbiome of newly diagnosed CD patients and controls in rural and urban China and Israel. The findings revealed changes in gut microbial composition and metabolomics similar to those observed in CD among rural residents who spent more time in urban environments. Moreover, specific dietary factors (such as coffee, manganese, and vitamin D) were linked to potential protective effects, while metabolites associated with the microbiome were primarily connected to host immune modules, and diet-related metabolites were associated with host epithelial metabolic functions.
+=======
 #R session info: 
 R version 4.0.2 (2020-06-22)
 Platform: x86_64-w64-mingw32/x64 (64-bit)
 Running under: Windows 10 x64 (build 22621)
+>>>>>>> b846a4c398aaa31911b251839e13261b760547c2
 
-Matrix products: default
+## Repository Contents
 
-locale:
-[1] LC_COLLATE=English_Israel.1252  LC_CTYPE=English_Israel.1252    LC_MONETARY=English_Israel.1252 LC_NUMERIC=C                    LC_TIME=English_Israel.1252    
+This repository contains the code for conducting the multi-omic analysis performed in the study. It includes the scripts and resources necessary to reproduce the results and further analyze the data.
 
-attached base packages:
-[1] stats     graphics  grDevices utils     datasets  methods   base     
+The repository structure is as follows:
 
-other attached packages:
- [1] plotly_4.10.1      lubridate_1.8.0    forcats_1.0.0      readr_2.1.2        tidyverse_2.0.0    rstatix_0.7.2      vegan_2.6-2        permute_0.9-7     
- [9] ggdist_3.2.0       magrittr_2.0.3     stringr_1.4.0      yardstick_0.0.9    workflowsets_0.1.0 workflows_0.2.4    tune_0.1.6         tidyr_1.2.0       
-[17] tibble_3.1.6       rsample_1.1.0      recipes_0.2.0      purrr_0.3.4        parsnip_0.2.0      modeldata_1.1.0    infer_1.0.4        dplyr_1.0.8       
-[25] dials_0.1.0        scales_1.2.1       broom_1.0.3        tidymodels_0.1.4   mixOmics_6.14.1    ggplot2_3.3.5      lattice_0.20-45    MASS_7.3-56       
+├── data/ # Directory containing the datasets used in the analysis
+├── scripts/ # Directory containing the R scripts for data preprocessing, analysis, and visualization
+├── results/ # Directory containing the generated results, including figures, tables, and statistical outputs
+└── README.md # Overview of the repository and instructions for usage
 
+<<<<<<< HEAD
+## Usage
+
+To use the code in this repository, follow these steps:
+
+1. Clone the repository:
+
+```bash
+git clone https://github.com/Tzipisb/SOURCE.git
+```
+Please note that the datasets used in the analysis are not included in this repository. Refer to the paper and the second github repository
+=======
 loaded via a namespace (and not attached):
  [1] readxl_1.4.0         backports_1.4.1      plyr_1.8.7           igraph_1.3.0         lazyeval_0.2.2       splines_4.0.2        BiocParallel_1.24.1 
  [8] listenv_0.9.0        digest_0.6.25        foreach_1.5.2        htmltools_0.5.2      fansi_1.0.3          cluster_2.1.3        tzdb_0.3.0          
@@ -42,3 +53,4 @@ loaded via a namespace (and not attached):
 [78] corpcor_1.6.10       R6_2.5.1             gridExtra_2.3        parallelly_1.35.0    codetools_0.2-19     assertthat_0.2.1     withr_2.5.0         
 [85] mgcv_1.8-40          parallel_4.0.2       hms_1.1.3            grid_4.0.2           rpart_4.1.16         timeDate_4022.108    class_7.3-20        
 [92] rmarkdown_2.21       carData_3.0-5        pROC_1.18.0          ellipse_0.4.3       
+>>>>>>> b846a4c398aaa31911b251839e13261b760547c2
